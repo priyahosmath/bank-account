@@ -10,9 +10,13 @@ export async function GET() {
         }
 
         const db = await initDb();
-        const user = await db.get('SELECT name, email, balance FROM users WHERE id = ?', [userSession.id]);
+        const users = await db.query('SELECT name, email, balance FROM users WHERE id = $1', [userSession.id]);
 
-        return NextResponse.json({ user }, { status: 200 });
+        if (users.rows.length === 0) {
+            return NextResponse.json({ message: 'User not found' }, { status: 404 });
+        }
+
+        return NextResponse.json({ user: users.rows[0] }, { status: 200 });
     } catch (error) {
         console.error('Profile fetch error:', error);
         return NextResponse.json({ message: 'Internal server error' }, { status: 500 });

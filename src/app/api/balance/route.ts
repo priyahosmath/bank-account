@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import { initDb } from '@/lib/db';
 import { getUserFromSession } from '@/lib/auth';
 
-export async function GET(req: Request) {
+export async function GET() {
     try {
         const userSession = await getUserFromSession();
         if (!userSession) {
@@ -10,15 +10,15 @@ export async function GET(req: Request) {
         }
 
         const db = await initDb();
-        const user = await db.get('SELECT balance FROM users WHERE id = ?', [userSession.id]);
+        const users = await db.query('SELECT balance FROM users WHERE id = $1', [userSession.id]);
 
-        if (!user) {
+        if (users.rows.length === 0) {
             return NextResponse.json({ message: 'User not found' }, { status: 404 });
         }
 
-        return NextResponse.json({ balance: user.balance }, { status: 200 });
+        return NextResponse.json({ balance: users.rows[0].balance });
     } catch (error) {
-        console.error('Balance check error:', error);
+        console.error('Balance error:', error);
         return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
     }
 }

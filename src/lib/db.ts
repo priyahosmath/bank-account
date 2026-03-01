@@ -1,44 +1,54 @@
-import sqlite3 from 'sqlite3';
-import { open } from 'sqlite';
-import path from 'path';
+import { Pool } from '@neondatabase/serverless';
 
-// Define the database file path
-const dbPath = path.join(process.cwd(), 'bank.sqlite');
+const DATABASE_URL = process.env.DATABASE_URL || '';
 
-export async function openDb() {
-  return open({
-    filename: dbPath,
-    driver: sqlite3.Database,
-  });
+let pool: Pool | null = null;
+
+export async function getDb() {
+  if (!DATABASE_URL) {
+    throw new Error('DATABASE_URL is not defined in environment variables');
+  }
+
+  if (!pool) {
+    pool = new Pool({ connectionString: DATABASE_URL });
+  }
+
+  return pool;
 }
 
-// Function to initialize the database schema
+// Function to initialize the database schema for Postgres
 export async function initDb() {
-  const db = await openDb();
-  await db.exec(`
+  const db = await getDb();
+
+  await db.query(`
     CREATE TABLE IF NOT EXISTS users (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       name TEXT NOT NULL,
       email TEXT UNIQUE NOT NULL,
       password TEXT NOT NULL,
-      balance REAL DEFAULT 0.0
+      balance REAL DEFAULT 5000.0
     );
+  `);
+
+  await db.query(`
     CREATE TABLE IF NOT EXISTS tokens (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       token TEXT NOT NULL UNIQUE,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
+  `);
+
+  await db.query(`
     CREATE TABLE IF NOT EXISTS transactions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER NOT NULL,
+      id SERIAL PRIMARY KEY,
+      user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       type TEXT NOT NULL, -- 'DEPOSIT', 'WITHDRAW', 'TRANSFER'
       amount REAL NOT NULL,
       description TEXT,
-      date DATETIME DEFAULT CURRENT_TIMESTAMP,
-      FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+      date TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
     );
   `);
+
   return db;
 }

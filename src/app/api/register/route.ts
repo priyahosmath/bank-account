@@ -13,8 +13,8 @@ export async function POST(req: Request) {
         const db = await initDb();
 
         // Check if user already exists
-        const existingUser = await db.get('SELECT * FROM users WHERE email = ?', [email]);
-        if (existingUser) {
+        const existingUsers = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (existingUsers.rows.length > 0) {
             return NextResponse.json({ message: 'User with this email already exists' }, { status: 409 });
         }
 
@@ -22,14 +22,14 @@ export async function POST(req: Request) {
         const hashedPassword = await bcrypt.hash(password, 10);
 
         // Insert new user with initial $5,000 balance
-        const result = await db.run(
-            'INSERT INTO users (name, email, password, balance) VALUES (?, ?, ?, 5000)',
+        const result = await db.query(
+            'INSERT INTO users (name, email, password, balance) VALUES ($1, $2, $3, 5000) RETURNING id',
             [name, email, hashedPassword]
         );
 
         return NextResponse.json({
             message: 'User registered successfully',
-            user: { id: result.lastID, name, email }
+            user: { id: result.rows[0].id, name, email }
         }, { status: 201 });
 
     } catch (error) {

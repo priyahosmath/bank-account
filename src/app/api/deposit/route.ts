@@ -3,6 +3,9 @@ import { initDb } from '@/lib/db';
 import { getUserFromSession } from '@/lib/auth';
 
 export async function POST(req: Request) {
+    const db = await initDb();
+    const client = await db.connect();
+
     try {
         const userSession = await getUserFromSession();
         if (!userSession) {
@@ -15,24 +18,28 @@ export async function POST(req: Request) {
             return NextResponse.json({ message: 'Invalid deposit amount' }, { status: 400 });
         }
 
-        const db = await initDb();
-
-        await db.exec('BEGIN TRANSACTION');
+        await client.query('BEGIN');
 
         // Update balance
-        await db.run('UPDATE users SET balance = balance + ? WHERE id = ?', [amount, userSession.id]);
+        await client.query('UPDATE users SET balance = balance + $1 WHERE id = $2', [amount, userSession.id]);
 
         // Record transaction
-        await db.run(
-            'INSERT INTO transactions (user_id, type, amount, description) VALUES (?, ?, ?, ?)',
+        await client.query(
+            'INSERT INTO transactions (user_id, type, amount, description) VALUES ($1, $2, $3, $4)',
             [userSession.id, 'DEPOSIT', amount, description || 'Funds Deposit']
         );
 
-        await db.exec('COMMIT');
+        const res = await client.query('SELECT balance FROM users WHERE id = $1', [userSession.id]);
+        const finalBalance = res.rows[0].balance;
 
-        return NextResponse.json({ message: 'Deposit successful', newBalance: (await db.get('SELECT balance FROM users WHERE id = ?', [userSession.id])).balance }, { status: 200 });
+        await client.query('COMMIT');
+
+        return NextResponse.json({ message: 'Deposit successful', newBalance: finalBalance }, { status: 200 });
     } catch (error) {
+        await client.query('ROLLBACK');
         console.error('Deposit error:', error);
         return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
+    } finally {
+        client.release();
     }
 }

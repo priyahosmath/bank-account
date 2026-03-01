@@ -15,10 +15,12 @@ export async function POST(req: Request) {
         const db = await initDb();
 
         // Check if user exists
-        const user = await db.get('SELECT * FROM users WHERE email = ?', [email]);
-        if (!user) {
+        const users = await db.query('SELECT * FROM users WHERE email = $1', [email]);
+        if (users.rows.length === 0) {
             return NextResponse.json({ message: 'Invalid credentials' }, { status: 401 });
         }
+
+        const user = users.rows[0];
 
         // Verify password
         const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -30,7 +32,7 @@ export async function POST(req: Request) {
         const token = signToken({ id: user.id, email: user.email });
 
         // Save token to database
-        await db.run('INSERT INTO tokens (user_id, token) VALUES (?, ?)', [user.id, token]);
+        await db.query('INSERT INTO tokens (user_id, token) VALUES ($1, $2)', [user.id, token]);
 
         // Set cookie
         const cookieStore = await cookies();

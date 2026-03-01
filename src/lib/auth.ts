@@ -1,6 +1,5 @@
 import jwt from 'jsonwebtoken';
 import { cookies } from 'next/headers';
-
 import { initDb } from './db';
 
 const JWT_SECRET = process.env.JWT_SECRET || 'super-secret-key-change-in-production';
@@ -18,21 +17,26 @@ export function verifyToken(token: string) {
 }
 
 export async function getUserFromSession() {
-    const cookieStore = await cookies();
-    const token = cookieStore.get('token')?.value;
+    try {
+        const cookieStore = await cookies();
+        const token = cookieStore.get('token')?.value;
 
-    if (!token) return null;
+        if (!token) return null;
 
-    const payload = verifyToken(token);
-    if (!payload) return null;
+        const payload = verifyToken(token);
+        if (!payload) return null;
 
-    // Check if the token exists in the database
-    const db = await initDb();
-    const tokenRecord = await db.get('SELECT * FROM tokens WHERE token = ?', [token]);
+        // Check if the token exists in the database
+        const db = await initDb();
+        const tokenRecords = await db.query('SELECT * FROM tokens WHERE token = $1', [token]);
 
-    if (!tokenRecord) {
-        return null; // Token was invalidated
+        if (tokenRecords.rows.length === 0) {
+            return null; // Token was invalidated
+        }
+
+        return payload;
+    } catch (error) {
+        console.error('Session verify error:', error);
+        return null;
     }
-
-    return payload;
 }
